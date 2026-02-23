@@ -43,10 +43,5 @@ export const api = {
   async getColumnsInfo() {
     const response = await axios.get(`${API_BASE}/columns-info`)
     return response.data
-  },
-
-  async getProgress() {
-    const response = await axios.get('/progress')
-    return response.data
   }
 }

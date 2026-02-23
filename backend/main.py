@@ -7,7 +7,8 @@ import io
 import json
 import asyncio
 import base64
-from concurrent.futures import ProcessPoolExecutor
+import threading
+from concurrent.futures import ThreadPoolExecutor
 import multiprocessing
 
 from models import ConfigModel, ComputeRequest, ComputeResponse, ComputeResult, ExportRequest
@@ -29,25 +30,10 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-progress_state = {"current": 0, "total": 0}
-
-
-def run_compute(data: List[Dict[str, Any]], config: ConfigModel):
-    def progress_callback(current, total):
-        progress_state["current"] = current
-        progress_state["total"] = total
-    
-    return compute_all(data, config, progress_callback)
-
 
 @app.get("/")
 async def root():
     return {"message": "NDDF对偶模型计算工具API", "version": "1.0.0"}
-
-
-@app.get("/progress")
-async def get_progress():
-    return progress_state
 
 
 @app.post("/api/upload", response_model=Dict[str, Any])
@@ -112,9 +98,6 @@ async def get_sheet_data(file_id: str = Form(...), sheet_name: str = Form(...)):
 @app.post("/api/compute", response_model=ComputeResponse)
 async def compute(request: ComputeRequest):
     try:
-        progress_state["current"] = 0
-        progress_state["total"] = len(request.data)
-        
         results = compute_all(request.data, request.config)
         
         return ComputeResponse(
@@ -180,15 +163,15 @@ async def get_columns_info():
         "undesiredTypes": ["非期望产出"],
         "defaultConfig": {
             "inputCols": [
-                {"name": "L", "direction": 1, "weight": 0.167},
-                {"name": "K", "direction": 1, "weight": 0.167},
-                {"name": "E", "direction": 1, "weight": 0.167}
+                {"name": "L", "direction": 1, "weight": 1/6},
+                {"name": "K", "direction": 1, "weight": 1/6},
+                {"name": "E", "direction": 1, "weight": 1/6}
             ],
             "outputCols": [
-                {"name": "Y", "direction": 1, "weight": 0.25}
+                {"name": "Y", "direction": 1, "weight": 1/4}
             ],
             "undesiredCols": [
-                {"name": "C", "direction": 1, "weight": 0.25},
+                {"name": "C", "direction": 1, "weight": 1/4},
                 {"name": "P", "direction": 0, "weight": 0}
             ],
             "idCol": "id",

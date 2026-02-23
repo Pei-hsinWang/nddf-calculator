@@ -3,7 +3,6 @@ from ortools.linear_solver import pywraplp
 from typing import Dict, Any, List, Optional
 from models import ConfigModel, ComputeResult
 from multiprocessing import Pool, cpu_count
-from tqdm import tqdm
 
 
 def solve_nddf_dual(
@@ -119,8 +118,7 @@ def _solve_single_task(args):
 
 def compute_all(
     data: List[Dict[str, Any]],
-    config: ConfigModel,
-    progress_callback=None
+    config: ConfigModel
 ) -> List[ComputeResult]:
     input_names = [col.name for col in config.inputCols]
     output_names = [col.name for col in config.outputCols]
@@ -133,20 +131,13 @@ def compute_all(
     }
     
     tasks = [(row, global_data, config) for row in data]
-    total = len(tasks)
     num_workers = min(cpu_count(), 8)
     
     results = []
     
     with Pool(processes=num_workers) as pool:
-        for idx, res in enumerate(pool.imap_unordered(_solve_single_task, tasks)):
+        for res in pool.imap_unordered(_solve_single_task, tasks):
             if res:
                 results.append(res)
-            
-            if progress_callback and (idx + 1) % max(1, total // 20) == 0:
-                progress_callback(idx + 1, total)
-    
-    if progress_callback:
-        progress_callback(total, total)
     
     return results

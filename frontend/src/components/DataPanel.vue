@@ -66,13 +66,6 @@
         开始计算
       </el-button>
     </div>
-
-    <el-progress
-      v-if="computing"
-      :percentage="computeProgress"
-      :format="progressFormat"
-      style="margin-top: 20px"
-    />
   </div>
 </template>
 
@@ -97,7 +90,6 @@ const currentSheet = ref('')
 const previewData = ref([])
 const rawData = ref([])
 const computing = ref(false)
-const computeProgress = ref(0)
 
 const previewColumns = computed(() => {
   if (previewData.value.length > 0) {
@@ -159,24 +151,9 @@ const startCompute = async () => {
   }
   
   computing.value = true
-  computeProgress.value = 0
   
   try {
-    const progressInterval = setInterval(async () => {
-      try {
-        const progress = await api.getProgress()
-        if (progress.total > 0) {
-          computeProgress.value = Math.round((progress.current / progress.total) * 100)
-        }
-      } catch {
-        // ignore
-      }
-    }, 500)
-    
     const result = await api.compute(props.config, rawData.value)
-    
-    clearInterval(progressInterval)
-    computeProgress.value = 100
     
     if (result.success) {
       ElMessage.success(result.message)
@@ -189,10 +166,6 @@ const startCompute = async () => {
   } finally {
     computing.value = false
   }
-}
-
-const progressFormat = (percentage) => {
-  return percentage === 100 ? '完成' : `${percentage}%`
 }
 </script>
 

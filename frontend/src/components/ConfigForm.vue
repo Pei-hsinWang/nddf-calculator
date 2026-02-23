@@ -40,7 +40,12 @@
           <el-input-number v-model="col.direction" :min="0" :max="1" :step="1" size="small" controls-position="right" />
         </el-col>
         <el-col :span="8">
-          <el-input-number v-model="col.weight" :min="0" :max="1" :step="0.01" size="small" :precision="3" controls-position="right" />
+          <el-input 
+            v-model="col.weightStr" 
+            size="small" 
+            placeholder="如: 1/4"
+            @blur="parseWeight(col)"
+          />
         </el-col>
         <el-col :span="2">
           <el-button type="danger" size="small" circle @click="removeColumn('input', index)">
@@ -68,7 +73,12 @@
           <el-input-number v-model="col.direction" :min="0" :max="1" :step="1" size="small" controls-position="right" />
         </el-col>
         <el-col :span="8">
-          <el-input-number v-model="col.weight" :min="0" :max="1" :step="0.01" size="small" :precision="3" controls-position="right" />
+          <el-input 
+            v-model="col.weightStr" 
+            size="small" 
+            placeholder="如: 1/4"
+            @blur="parseWeight(col)"
+          />
         </el-col>
         <el-col :span="2">
           <el-button type="danger" size="small" circle @click="removeColumn('output', index)">
@@ -96,7 +106,12 @@
           <el-input-number v-model="col.direction" :min="0" :max="1" :step="1" size="small" controls-position="right" />
         </el-col>
         <el-col :span="8">
-          <el-input-number v-model="col.weight" :min="0" :max="1" :step="0.01" size="small" :precision="3" controls-position="right" />
+          <el-input 
+            v-model="col.weightStr" 
+            size="small" 
+            placeholder="如: 1/4"
+            @blur="parseWeight(col)"
+          />
         </el-col>
         <el-col :span="2">
           <el-button type="danger" size="small" circle @click="removeColumn('undesired', index)">
@@ -115,7 +130,13 @@
 
     <el-divider />
 
-    <el-button type="primary" @click="applyConfig" style="width: 100%">
+    <div class="weight-summary">
+      <el-tag :type="weightSumValid ? 'success' : 'danger'" size="large">
+        权重总和: {{ weightSum.toFixed(4) }} {{ weightSumValid ? '(=1)' : '(≠1)' }}
+      </el-tag>
+    </div>
+
+    <el-button type="primary" @click="applyConfig" style="width: 100%; margin-top: 10px;">
       <el-icon><Check /></el-icon> 应用配置
     </el-button>
   </el-form>
@@ -134,18 +155,57 @@ const props = defineProps({
 
 const emit = defineEmits(['config-change'])
 
+const initCol = (name, direction, weight) => ({
+  name,
+  direction,
+  weight,
+  weightStr: formatWeight(weight)
+})
+
+const formatWeight = (val) => {
+  if (val === 0) return '0'
+  if (val === 1) return '1'
+  const fractions = [
+    [1/2, '1/2'], [1/3, '1/3'], [1/4, '1/4'], [1/5, '1/5'], [1/6, '1/6'],
+    [2/3, '2/3'], [3/4, '3/4'], [1/8, '1/8'], [1/12, '1/12']
+  ]
+  for (const [frac, str] of fractions) {
+    if (Math.abs(val - frac) < 0.0001) return str
+  }
+  return val.toFixed(4)
+}
+
+const parseWeight = (col) => {
+  const str = col.weightStr.trim()
+  if (str.includes('/')) {
+    const parts = str.split('/')
+    if (parts.length === 2) {
+      const num = parseFloat(parts[0])
+      const den = parseFloat(parts[1])
+      if (!isNaN(num) && !isNaN(den) && den !== 0) {
+        col.weight = num / den
+        return
+      }
+    }
+  }
+  const val = parseFloat(str)
+  if (!isNaN(val)) {
+    col.weight = val
+  }
+}
+
 const config = ref({
   inputCols: [
-    { name: 'L', direction: 1, weight: 0.167 },
-    { name: 'K', direction: 1, weight: 0.167 },
-    { name: 'E', direction: 1, weight: 0.167 }
+    initCol('L', 1, 1/6),
+    initCol('K', 1, 1/6),
+    initCol('E', 1, 1/6)
   ],
   outputCols: [
-    { name: 'Y', direction: 1, weight: 0.25 }
+    initCol('Y', 1, 1/4)
   ],
   undesiredCols: [
-    { name: 'C', direction: 1, weight: 0.25 },
-    { name: 'P', direction: 0, weight: 0 }
+    initCol('C', 1, 1/4),
+    initCol('P', 0, 0)
   ],
   idCol: 'id',
   yearCol: 'year',
@@ -153,12 +213,24 @@ const config = ref({
 })
 
 const availableColumns = computed(() => {
-  const cols = [...props.columns]
-  return cols
+  return [...props.columns]
+})
+
+const weightSum = computed(() => {
+  const allCols = [
+    ...config.value.inputCols,
+    ...config.value.outputCols,
+    ...config.value.undesiredCols
+  ]
+  return allCols.reduce((sum, col) => sum + (col.weight || 0), 0)
+})
+
+const weightSumValid = computed(() => {
+  return Math.abs(weightSum.value - 1) < 0.0001
 })
 
 const addColumn = (type) => {
-  const newCol = { name: '', direction: 1, weight: 0 }
+  const newCol = { name: '', direction: 1, weight: 0, weightStr: '0' }
   if (type === 'input') {
     config.value.inputCols.push(newCol)
   } else if (type === 'output') {
@@ -193,18 +265,47 @@ const applyConfig = () => {
     return
   }
   
-  emit('config-change', JSON.parse(JSON.stringify(config.value)))
+  if (!weightSumValid.value) {
+    ElMessage.error(`权重总和必须为1，当前总和为 ${weightSum.value.toFixed(4)}`)
+    return
+  }
+  
+  const outputConfig = {
+    inputCols: config.value.inputCols.map(c => ({ name: c.name, direction: c.direction, weight: c.weight })),
+    outputCols: config.value.outputCols.map(c => ({ name: c.name, direction: c.direction, weight: c.weight })),
+    undesiredCols: config.value.undesiredCols.map(c => ({ name: c.name, direction: c.direction, weight: c.weight })),
+    idCol: config.value.idCol,
+    yearCol: config.value.yearCol,
+    isVRS: config.value.isVRS
+  }
+  
+  emit('config-change', outputConfig)
   ElMessage.success('配置已应用')
 }
 
 const setDefaultConfig = (defaultConfig) => {
   if (defaultConfig) {
-    config.value = JSON.parse(JSON.stringify(defaultConfig))
+    config.value = {
+      inputCols: defaultConfig.inputCols.map(c => initCol(c.name, c.direction, c.weight)),
+      outputCols: defaultConfig.outputCols.map(c => initCol(c.name, c.direction, c.weight)),
+      undesiredCols: defaultConfig.undesiredCols.map(c => initCol(c.name, c.direction, c.weight)),
+      idCol: defaultConfig.idCol,
+      yearCol: defaultConfig.yearCol,
+      isVRS: defaultConfig.isVRS
+    }
   }
 }
 
 watch(() => config.value, () => {
-  emit('config-change', JSON.parse(JSON.stringify(config.value)))
+  const outputConfig = {
+    inputCols: config.value.inputCols.map(c => ({ name: c.name, direction: c.direction, weight: c.weight })),
+    outputCols: config.value.outputCols.map(c => ({ name: c.name, direction: c.direction, weight: c.weight })),
+    undesiredCols: config.value.undesiredCols.map(c => ({ name: c.name, direction: c.direction, weight: c.weight })),
+    idCol: config.value.idCol,
+    yearCol: config.value.yearCol,
+    isVRS: config.value.isVRS
+  }
+  emit('config-change', outputConfig)
 }, { deep: true, immediate: true })
 
 defineExpose({ setDefaultConfig })
@@ -244,6 +345,11 @@ defineExpose({ setDefaultConfig })
   display: flex;
   align-items: center;
   gap: 8px;
+}
+
+.weight-summary {
+  text-align: center;
+  padding: 10px 0;
 }
 
 :deep(.el-input-number) {
